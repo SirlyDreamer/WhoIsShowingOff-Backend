@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, Text
+from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # 定义数据库模型
@@ -7,14 +7,14 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = 'Users'
-    userID = Column(Integer, primary_key=True, unique=True)
+    userID = Column(String(255), primary_key=True, unique=True)
     userName = Column(Text, nullable=False)
     score = Column(Integer, nullable=False)
 
 
 # 定义操作库
 class UserDB:
-    def __init__(self, db_path='sqlite://data/users.db'):
+    def __init__(self, db_path='sqlite:///data/users.db'):
         self.engine = create_engine(db_path)
         self.Session = sessionmaker(bind=self.engine)
 
@@ -24,7 +24,7 @@ class UserDB:
     def add_user(self, user_id, user_name):
         with self.Session() as session:
             if not session.query(User).filter_by(userID=user_id).first():
-                user = User(userID=user_id, userName=user_name)
+                user = User(userID=user_id, userName=user_name, score=0)
                 session.add(user)
                 session.commit()
                 return True
@@ -33,12 +33,12 @@ class UserDB:
 
     def get_user(self, user_id):
         session = self.Session()
-        user = session.query(User).filter_by(id=user_id).first()
+        user = session.query(User).filter_by(userID=user_id).first()
         session.close()
         return user
     def update_user(self, user_id, update_data):
         session = self.Session()
-        user = session.query(User).filter_by(id=user_id).first()
+        user = session.query(User).filter_by(userID=user_id).first()
         for key, value in update_data.items():
             setattr(user, key, value)
         session.commit()
@@ -46,7 +46,7 @@ class UserDB:
 
     def delete_user(self, user_id):
         session = self.Session()
-        user = session.query(User).filter_by(id=user_id).first()
+        user = session.query(User).filter_by(userID=user_id).first()
         session.delete(user)
         session.commit()
         session.close()
