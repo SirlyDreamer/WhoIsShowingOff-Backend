@@ -93,12 +93,12 @@ def join():
         room = rooms.get(roomID)
         if room.join(userID):
             sse.publish(data=userID, type='join', channel=roomID)
-            return {'status': 0, 'msg': '加入成功！'}
+            return {'status': 0, 'msg': '加入成功！', 'owner': room.owner}
         else:
-            return {'status': -1, 'msg': '该房间游戏已经开始了！'}
+            return {'status': -1, 'msg': '该房间游戏已经开始了！'}, 403
     else:
         rooms.create(roomID, userID)
-        return {'status': 0, 'msg': '创建房间成功！'}
+        return {'status': 0, 'msg': '创建房间成功！', 'owner': userID}
 
 
 @app.post('/leave')
@@ -154,13 +154,13 @@ def start(roomID):
     if not room.is_all_ready():
         return {'status': -3, 'msg': '还有玩家未准备！'}
     timers[roomID] = Timer(5, roomID)
+    room.start()
     sse.publish(data={
         "total": len(room.question_set),
         "players": list(room.players),
         "scores": list(room.scores)
     }, type='start', channel=roomID)
     timers[roomID].start()
-    room.start()
     return {'status': 0, 'msg': '游戏开始！'}
 
 
@@ -173,10 +173,14 @@ def question(roomID):
     room = rooms.get(roomID)
     if not room.is_start:
         return {'status': -2, 'msg': '比赛还未开始！'}, 403
-    userID = request.args.get('userID')
-    if userID not in room.players:
+    userID = str(request.json.get('userID'))
+    if not room.is_in_room(userID):
         return {'status': -3, 'msg': '您不在房间内！'}, 403
-    return room.get_question(userID)
+    q = room.get_question()
+    if q is None:
+        return {'status': 1, 'msg': '问题正在加载中...'}, 404
+    else:
+        return q
 
 
 @app.post('/rooms/<roomID>/submit')
@@ -187,7 +191,7 @@ def submit(roomID):
     if not room.is_start:
         return {'status': -2, 'msg': '比赛还未开始！'}, 403
     userID = str(request.json.get('userID'))
-    if userID not in room.players:
+    if not room.is_in_room(userID):
         return {'status': -3, 'msg': '您不在房间内！'}, 403
     answer = request.json.get('answer')
     if room.check_answer(userID, answer):

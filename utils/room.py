@@ -42,9 +42,9 @@ class Room:
         self.event = None
 
         self.question_index = 0
+        self.question = None
         self.question_show_time = 0
-        self.correct_answer = None
-        self.correct_index = -1
+        self.answer = -1
 
     def set_owner(self, owner):
         # 转移房主
@@ -66,8 +66,8 @@ class Room:
             self.scores.pop(player)
             self.players.remove(player)
 
-    def is_start(self):
-        return self.is_start
+    def is_in_room(self, player):
+        return player in self.players
 
     def is_owner(self, player):
         return player == self.owner
@@ -90,44 +90,37 @@ class Room:
         return self.is_start, self.ready_players, self.players
 
     def get_question(self):
-        if self.question_index >= len(self.question_set):
-            self.finalize()
+        if not self.is_start:
             return None
-        current_question = self.question_set[self.question_index]
-        self.correct_answer = current_question['short_answer']
-        options = [
-            self.correct_answer,
-            current_question['wrong_answer_1'],
-            current_question['wrong_answer_2'],
-            current_question['wrong_answer_3'],
-            current_question['wrong_answer_4'],
-            current_question['wrong_answer_5']
-        ]
-        random.shuffle(options)
-        self.correct_index = options.index(self.correct_answer)
-        self.question_show_time = time.time()
-        question = {
-            'id': current_question['id'],
-            'question': current_question['question'],
-            'options': options,
-            'reason': current_question['reason']
-        }
-        print(json.dumps(question, ensure_ascii=False, indent=2))
-        print('Answer:', self.correct_index)
-        return question
+        if self.question_index >= len(self.question_set):
+            return None
+        return {
+            'question': self.question['question'],
+            'options': self.question['options'],
+            'reason': self.question['reason']
+        } if self.question is not None else None
 
     def next_question(self):
         # If nobody answers the question in time, the game will go to the next question
         self.question_index += 1
-        return self.get_question()
+        self.question_show_time = time.time()
+        if self.question_index >= len(self.question_set):
+            self.finalize()
+            self.question = None
+            return None
+        question_id = self.question_set[self.question_index]
+        self.question = qset.get_question(question_id)
+        self.answer = self.question['answer']
+        print(json.dumps(self.question, ensure_ascii=False, indent=2))
+        return self.question
 
     def check_answer(self, player: int, answer: int):
         # Check if the player's answer is correct
         if time.time() - self.question_show_time > self.timeout:
             return -1
-        if answer == self.correct_index:
+        if answer == self.answer:
             self.scores[player] += 1
-            self.question_index += 1
+            self.next_question()
             return 1
         else:
             return 0
