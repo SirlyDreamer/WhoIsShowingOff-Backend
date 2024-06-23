@@ -73,11 +73,9 @@ class Room:
         return player == self.owner
 
     def is_all_ready(self):
-        print("Players:", self.players)
-        print("Ready players:", self.ready_players)
         return len(self.ready_players) == len(self.players)
 
-    def start(self, num_questions=5):
+    def start(self, num_questions=15):
         self.question_set = qset.pick_random_questions(num_questions)
         self.question_index = 0
         self.is_start = True
@@ -85,7 +83,7 @@ class Room:
     def ready(self, player: int):
         self.ready_players.add(player)
 
-    def cancel_ready(self, player: int):
+    def deready(self, player: int):
         self.ready_players.remove(player)
 
     def status(self):

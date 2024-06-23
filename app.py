@@ -1,5 +1,7 @@
-# flask API with SSE
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 
 from flask import Flask, request
 from flask_sse import sse
@@ -21,29 +23,49 @@ class Timer:
         self.roomID = roomID
         self.room = rooms.get(roomID)
         self.timeout = timeout
-        self.last_tick = time.time()
-        self._stop = False
-        self._reset = False
+        self.event_queue = Queue()
+        self.executor = ThreadPoolExecutor(max_workers=1)
+        self.job = None
+
+        # 启动一个线程来处理事件队列
+        self.event_processor = threading.Thread(target=self.process_events)
+        self.event_processor.daemon = True
+        self.event_processor.start()
 
     def start(self):
-        self._stop = False
-        self.last_tick = time.time()
-        while not self._stop:
-            if self._reset:
-                self.last_tick = time.time()
-                self._reset = False
-            if time.time() - self.last_tick >= self.timeout:
-                self.room.next_question()
-                sse.publish('timeout', type='timeout', channel=self.roomID)
-                self.last_tick = time.time()
-        self._stop = False
-        self._reset = False
+        if self.job is None or self.job.done():
+            self.job = self.executor.submit(self.run_timer)
 
     def stop(self):
-        self._stop = True
+        if self.job and not self.job.done():
+            self.job.cancel()
 
     def reset(self):
-        self._reset = True
+        self.stop()
+        self.start()
+
+    def run_timer(self):
+        while True:
+            time.sleep(self.timeout)
+            if self.trigger_action():
+                break
+
+    def trigger_action(self):
+        if self.room.next_question() is None:
+            self.event_queue.put(('finalize', self.roomID))
+            self.stop()
+            return True
+        self.event_queue.put(('timeout', self.roomID))
+        return False
+
+    def process_events(self):
+        with app.app_context():
+            while True:
+                event_type, roomID = self.event_queue.get()
+                if event_type == 'timeout':
+                    sse.publish('timeout', type='timeout', channel=roomID)
+                elif event_type == 'finalize':
+                    sse.publish('finalize', type='finalize', channel=roomID)
 
 
 timers = {}
@@ -97,7 +119,7 @@ def leave():
 
 @app.post('/rooms/<roomID>/ready')
 def ready(roomID):
-    roomID = str(request.view_args['roomID'])
+    # roomID = str(request.view_args['roomID'])
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     userID = str(request.json.get('userID'))
@@ -109,19 +131,20 @@ def ready(roomID):
 
 @app.post('/rooms/<roomID>/deready')
 def deready(roomID):
-    roomID = str(request.view_args['roomID'])
+    # roomID = str(request.view_args['roomID'])
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     userID = str(request.json.get('userID'))
     room = rooms.get(roomID)
-    room.deready(userID)
+    if userID in room.ready_players:
+        room.deready(userID)
     sse.publish(data=userID, type='deready', channel=roomID)
     return {'status': 0, 'msg': '取消准备成功！'}
 
 
 @app.post('/rooms/<roomID>/start')
 def start(roomID):
-    roomID = str(request.view_args['roomID'])
+    # roomID = str(request.view_args['roomID'])
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     userID = str(request.json.get('userID'))
@@ -144,7 +167,7 @@ def start(roomID):
 @app.get('/rooms/<roomID>/question')
 def question(roomID):
     # 当客户端接收到'start', 'answer', 'timeout'事件后，调用此接口获取题目
-    roomID = str(request.view_args['roomID'])
+    # roomID = str(request.view_args['roomID'])
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     room = rooms.get(roomID)
@@ -157,10 +180,7 @@ def question(roomID):
 
 
 @app.post('/rooms/<roomID>/submit')
-def competition(roomID):
-    # SSE长连接，用于通知用户比赛状态
-    # 事件：join, leave, ready, deready, start, answer, question, finish
-    roomID = str(request.view_args['roomID'])
+def submit(roomID):
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     room = rooms.get(roomID)
@@ -175,3 +195,4 @@ def competition(roomID):
         room.next_question()
         timers[roomID].reset()
         return {'status': 0, 'msg': '回答正确！'}
+    return {'status': -4, 'msg': '回答错误！'}
