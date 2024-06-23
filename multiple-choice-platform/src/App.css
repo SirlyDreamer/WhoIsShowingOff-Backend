@@ -1,9 +1,10 @@
 :root {
-  --primary-color: #4CAF50;
-  --secondary-color: #f0f0f0;
-  --accent-color: #ff9800;
-  --background-color: #ffffff;
-  --text-color: #333333;
+  --primary-color: #0020F8;
+  --secondary-color: #FFF4F4;
+  --accent-color: #F73B20;
+  --background-color: #FFF4F4;
+  --text-color: #000000;
+  --highlight-color: #F8E850;
   --button-hover-color: #45a049;
 }
 
@@ -25,6 +26,7 @@ body {
   padding: 20px;
   border-radius: 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border: 2px solid var(--primary-color);
 }
 
 h1 {
@@ -75,9 +77,9 @@ button:hover {
   padding: 10px;
   font-size: 16px;
   cursor: pointer;
-  border: 1px solid var(--primary-color);
+  border: 2px solid var(--primary-color);
   border-radius: 5px;
-  background-color: white;
+  background-color: var(--highlight-color);
   color: var(--text-color);
   width: 100%;
   box-sizing: border-box;
@@ -100,6 +102,6 @@ button:hover {
 
 .countdown {
   height: 100%;
-  background-color: var(--primary-color);
+  background-color: var(--accent-color);
   transition: width 1s linear;
 }
