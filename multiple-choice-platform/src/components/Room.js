@@ -1,45 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import Option from './Option';
+import PropTypes from 'prop-types';
 
-const Room = ({ question, onOptionClick, sseUrl, user, roomID, onBackToMain }) => {
-  const [eventSource, setEventSource] = useState(null);
-  const [currentQuestion, setCurrentQuestion] = useState(question);
-  const [players, setPlayers] = useState([]);
-  const [readyStatus, setReadyStatus] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
+const Room = ({ sseUrl, user, roomID, onLeave }) => {
   const [timeLeft, setTimeLeft] = useState(30);
+  const [eventSource, setEventSource] = useState(null);
+  const [players, setPlayers] = useState([user]);
+  const [readyStatus, setReadyStatus] = useState(false);
 
   useEffect(() => {
-    const fetchRoomDetails = async () => {
-      try {
-        const response = await axios.get(`http://127.0.0.1:11451/rooms/${roomID}`);
-        if (response.data.owner === user.userID) {
-          setIsOwner(true);
-        }
-      } catch (error) {
-        console.error('Error fetching room details:', error);
-      }
-    };
-
-    fetchRoomDetails();
-
     // Create a new EventSource instance
     const source = new EventSource(sseUrl);
     setEventSource(source);
 
-    // Listen for 'timer' events
-    source.addEventListener('timer', (event) => {
-      const data = JSON.parse(event.data);
-      setTimeLeft(data.timeLeft);
-    });
-
-    // Listen for 'start' events to reset the timer and set a new question
-    source.addEventListener('start', (event) => {
-      const data = JSON.parse(event.data);
-      setTimeLeft(30); // Reset timer to 30 seconds
-      setCurrentQuestion(data.question); // Set the new question
-    });
 
     // Listen for 'join' events to update the list of players
     source.addEventListener('join', (event) => {
@@ -67,20 +40,12 @@ const Room = ({ question, onOptionClick, sseUrl, user, roomID, onBackToMain }) =
       );
     });
 
-    // Listen for 'leave' events to remove the player from the list
-    source.addEventListener('leave', (event) => {
-      const data = JSON.parse(event.data);
-      setPlayers((prevPlayers) =>
-        prevPlayers.filter((player) => player.userID !== data.userID)
-      );
-    });
-
     // Clean up on component unmount
     return () => {
       source.close();
     };
-  }, [sseUrl, roomID, user.userID]);
-
+  }, [sseUrl]);
+  
   const handleGetReady = async () => {
     if (!user || !user.userID) {
       console.error('User information is missing.');
@@ -98,32 +63,18 @@ const Room = ({ question, onOptionClick, sseUrl, user, roomID, onBackToMain }) =
       console.error('Error changing ready status:', error);
     }
   };
-
-  const handleLeaveRoom = async () => {
+  const handleBackToMain = async () => {
     try {
       await axios.post(`http://127.0.0.1:11451/leave`, { roomID, userID: user.userID });
-      onBackToMain();
+      onLeave();
     } catch (error) {
       console.error('Error leaving room:', error);
     }
   };
-
-  const handleStartGame = async () => {
-    try {
-      await axios.post(`http://127.0.0.1:11451/rooms/${roomID}/start`, { userID: user.userID });
-    } catch (error) {
-      console.error('Error starting game:', error);
-    }
-  };
+  
 
   return (
     <div className="room-container">
-      <h2>{currentQuestion.question}</h2>
-      <div className="options">
-        {currentQuestion.options.map((option, index) => (
-          <Option key={index} option={option} onOptionClick={onOptionClick} />
-        ))}
-      </div>
       <div className="countdown-bar">
         <div className="countdown" style={{ width: `${(timeLeft / 30) * 100}%` }}></div>
       </div>
@@ -140,10 +91,21 @@ const Room = ({ question, onOptionClick, sseUrl, user, roomID, onBackToMain }) =
       <button onClick={handleGetReady}>
         {readyStatus ? 'De-Ready' : 'Get Ready'}
       </button>
-      <button onClick={handleLeaveRoom}>Leave Room</button>
-      {isOwner && <button onClick={handleStartGame}>Start Game</button>}
+      <button onClick={handleBackToMain}>
+        {"leave"}
+      </button>
+      
     </div>
   );
+};
+
+Room.propTypes = {
+  sseUrl: PropTypes.string.isRequired,
+  user: PropTypes.shape({
+    userID: PropTypes.string.isRequired,
+  }).isRequired,
+  roomID: PropTypes.string.isRequired,
+  onLeave: PropTypes.func.isRequired,
 };
 
 export default Room;
