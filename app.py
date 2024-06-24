@@ -243,7 +243,7 @@ def submit(roomID):
         return {'status': -2, 'msg': '问题已过期！'}
     return {'status': -4, 'msg': '回答错误！'}
 
-@app.post('/rooms/<roomID>/scoreboard')
+@app.get('/rooms/<roomID>/scoreboard')
 def scoreboard(roomID):
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
@@ -256,3 +256,10 @@ def players(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     room = rooms.get(roomID)
     return list(room.get_players())
+
+@app.get('/userinfo/<userID>')
+def userinfo(userID):
+    user = users.get_user(userID)
+    if user is None:
+        return {'status': -1, 'msg': '用户不存在！'}, 404
+    return {'userID': user.userID, 'userName': user.userName, 'score': user.score}

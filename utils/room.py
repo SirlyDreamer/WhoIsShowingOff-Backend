@@ -46,7 +46,6 @@ class Room:
 
         self.question_index = 0
         self.question = None
-        self.question_show_time = 0
         self.answer = -1
 
     def set_owner(self, owner):
@@ -128,7 +127,6 @@ class Room:
     def next_question(self):
         # If nobody answers the question in time, the game will go to the next question
         self.question_index += 1
-        self.question_show_time = time.time()
         if self.question_index >= len(self.question_set):
             self.finalize()
             self.question = None
