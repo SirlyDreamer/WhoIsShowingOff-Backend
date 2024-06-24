@@ -12,17 +12,23 @@ app = Flask(__name__)
 app.config["REDIS_URL"] = "redis://127.0.0.1:6379"
 app.register_blueprint(sse, url_prefix='/events')
 
+adminPassword = None
+
 users = UserDB()
 users.create_table()
+
+if users.get_user('admin') is not None:
+    adminPassword = users.get_user('admin').userName
 
 rooms = RoomManager()
 
 
 class Timer:
-    def __init__(self, timeout, roomID):
+    def __init__(self, listening_time, rest_time, roomID):
         self.roomID = roomID
         self.room = rooms.get(roomID)
-        self.timeout = timeout
+        self.listening_time = listening_time
+        self.rest_time = rest_time
         self.event_queue = Queue()
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.job = None
@@ -46,26 +52,38 @@ class Timer:
 
     def run_timer(self):
         while True:
-            time.sleep(self.timeout)
-            if self.trigger_action():
-                break
+            self.check_over()
+            self.start_turn()
+            time.sleep(self.listening_time)
+            self.stop_turn()
+            time.sleep(self.rest_time)
 
-    def trigger_action(self):
-        if self.room.next_question() is None:
-            self.event_queue.put(('finalize', self.roomID))
+    def start_turn(self):
+        self.room.next_question()
+        self.check_over()
+        self.event_queue.put('start')
+        self.room.allow_submit = True
+
+    def stop_turn(self):
+        self.check_over()
+        self.event_queue.put('done')
+        self.room.allow_submit = False
+
+    def check_over(self):
+        if not self.room.is_start:
             self.stop()
-            return True
-        self.event_queue.put(('timeout', self.roomID))
-        return False
+            self.event_queue.put('finalize')
 
     def process_events(self):
         with app.app_context():
             while True:
-                event_type, roomID = self.event_queue.get()
-                if event_type == 'timeout':
-                    sse.publish('timeout', type='timeout', channel=roomID)
+                event_type = self.event_queue.get()
+                if event_type == 'start':
+                    sse.publish(self.room.get_question(), type='start', channel=self.roomID)
+                elif event_type == 'done':
+                    sse.publish(self.room.get_answer(), type='done', channel=self.roomID)
                 elif event_type == 'finalize':
-                    sse.publish('finalize', type='finalize', channel=roomID)
+                    sse.publish(self.room.scores, type='finalize', channel=self.roomID)
 
 
 timers = {}
@@ -76,6 +94,12 @@ timers = {}
 def login():
     userID = str(request.json.get('userID'))
     userName = str(request.json.get('userName', str(userID)))
+    password = str(request.json.get('password'))
+    if userID == 'admin':
+        if password == adminPassword:
+            return {'status': 0, 'msg': 'Superuser login success'}
+        else:
+            return {'status': -1, 'msg': 'Password error'}, 403
     if users.get_user(userID):
         return {'status': 0, 'msg': 'Login success'}
     else:
@@ -91,8 +115,11 @@ def join():
     userID = str(request.json.get('userID'))
     if rooms.exists(roomID):
         room = rooms.get(roomID)
+        userinfo = users.get_user(userID)
+        if userinfo is None:
+            return {'status': -1, 'msg': '用户不存在！'}, 403
         if room.join(userID):
-            sse.publish(data=userID, type='join', channel=roomID)
+            sse.publish(data={'userID': userinfo.userID, 'userName': userinfo.userName}, type='join', channel=roomID)
             return {'status': 0, 'msg': '加入成功！', 'owner': room.owner}
         else:
             return {'status': -1, 'msg': '该房间游戏已经开始了！'}, 403
@@ -144,30 +171,25 @@ def deready(roomID):
 
 @app.post('/rooms/<roomID>/start')
 def start(roomID):
-    # roomID = str(request.view_args['roomID'])
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     userID = str(request.json.get('userID'))
     room = rooms.get(roomID)
     if not room.is_owner(userID):
         return {'status': -2, 'msg': '只有房主可以开始游戏！'}, 403
-    if not room.is_all_ready():
-        return {'status': -3, 'msg': '还有玩家未准备！'}
-    timers[roomID] = Timer(5, roomID)
+    password = str(request.json.get('password'))
+    if roomID == '0000' and (userID != 'admin' or password != adminPassword):
+        return {'status': -2, 'msg': '只有管理员才能开始游戏'}, 403
+    # if not room.is_all_ready():
+    #     return {'status': -3, 'msg': '还有玩家未准备！'}
+    timers[roomID] = Timer(5, 3, roomID)
     room.start()
-    sse.publish(data={
-        "total": len(room.question_set),
-        "players": list(room.players),
-        "scores": list(room.scores)
-    }, type='start', channel=roomID)
     timers[roomID].start()
     return {'status': 0, 'msg': '游戏开始！'}
 
 
 @app.get('/rooms/<roomID>/question')
 def question(roomID):
-    # 当客户端接收到'start', 'answer', 'timeout'事件后，调用此接口获取题目
-    # roomID = str(request.view_args['roomID'])
     if not rooms.exists(roomID):
         return {'status': -1, 'msg': '房间不存在！'}, 404
     room = rooms.get(roomID)
@@ -195,8 +217,16 @@ def submit(roomID):
         return {'status': -3, 'msg': '您不在房间内！'}, 403
     answer = request.json.get('answer')
     if room.check_answer(userID, answer):
-        sse.publish(data=userID, type='answer', channel=roomID)
-        room.next_question()
-        timers[roomID].reset()
+        # sse.publish(data=userID, type='answer', channel=roomID)
+        # room.next_question()
+        # timers[roomID].reset()
         return {'status': 0, 'msg': '回答正确！'}
     return {'status': -4, 'msg': '回答错误！'}
+
+
+@app.get('/rooms/<roomID>/players')
+def players(roomID):
+    if not rooms.exists(roomID):
+        return {'status': -1, 'msg': '房间不存在！'}, 404
+    room = rooms.get(roomID)
+    return list(room.get_players())

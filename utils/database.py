@@ -36,6 +36,7 @@ class UserDB:
         user = session.query(User).filter_by(userID=user_id).first()
         session.close()
         return user
+
     def update_user(self, user_id, update_data):
         session = self.Session()
         user = session.query(User).filter_by(userID=user_id).first()
