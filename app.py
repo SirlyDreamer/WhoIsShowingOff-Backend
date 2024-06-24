@@ -195,9 +195,9 @@ def question(roomID):
     room = rooms.get(roomID)
     if not room.is_start:
         return {'status': -2, 'msg': '比赛还未开始！'}, 403
-    userID = str(request.json.get('userID'))
-    if not room.is_in_room(userID):
-        return {'status': -3, 'msg': '您不在房间内！'}, 403
+    # userID = str(request.json.get('userID'))
+    # if not room.is_in_room(userID):
+    #     return {'status': -3, 'msg': '您不在房间内！'}, 403
     q = room.get_question()
     if q is None:
         return {'status': 1, 'msg': '问题正在加载中...'}, 404
