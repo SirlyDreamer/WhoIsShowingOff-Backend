@@ -140,13 +140,13 @@ class Room:
         self.allow_submit = True
         return self.question
 
-    def check_answer(self, player: int, answer: int):
+    def check_answer(self, player: str, answer: int):
         # Check if the player's answer is correct
         if not self.allow_submit:
             return -1
         if answer == self.answer:
-            self.scores[player] += 1
-            self.next_question()
+            self.scores[str(player)] += 1
+            # self.next_question()
             return 1
         else:
             return 0

@@ -233,11 +233,14 @@ def submit(roomID):
     if not room.is_in_room(userID):
         return {'status': -3, 'msg': '您不在房间内！'}, 403
     answer = request.json.get('answer')
-    if room.check_answer(userID, answer):
+    result = room.check_answer(userID, answer)
+    if result == 1:
         # sse.publish(data=userID, type='answer', channel=roomID)
         # room.next_question()
         # timers[roomID].reset()
         return {'status': 0, 'msg': '回答正确！'}
+    elif result == -1:
+        return {'status': -2, 'msg': '问题已过期！'}
     return {'status': -4, 'msg': '回答错误！'}
 
 @app.post('/rooms/<roomID>/scoreboard')
