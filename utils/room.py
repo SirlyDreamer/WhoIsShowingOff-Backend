@@ -38,7 +38,7 @@ class Room:
         self.players.add((owner_info.userID, owner_info.userName))
         self.ready_players = set()
         self.scores = {
-            owner_info.userID: owner_info.score
+            owner_info.userID: 0
         }
         self.is_start = False
         self.allow_submit = False
@@ -59,7 +59,8 @@ class Room:
             return False
         player_info = users.get_user(player)
         self.players.add((player_info.userID, player_info.userName))
-        self.scores[player] = player_info.score
+        # self.scores[player] = player_info.score
+        self.scores[player_info.userID] = 0
         return True
 
     def leave(self, player: str):
@@ -67,7 +68,7 @@ class Room:
         # TODO: 游戏开始后能否离开房间
         if player in self.players:
             player_info = users.get_user(player)
-            users.update_user(player, {'score': self.scores[player_info.userID]})
+            # users.update_user(player, {'score': self.scores[player_info.userID]})
             self.scores.pop(player_info.userID)
             self.players.remove((player_info.userID, player_info.userName))
 
@@ -92,8 +93,15 @@ class Room:
     def deready(self, player: str):
         self.ready_players.remove(player)
 
-    def status(self):
-        return self.is_start, self.ready_players, self.players
+    def scoreboard(self):
+        scores = []
+        for player in self.players:
+            scores.append({
+                'userID': player[0],
+                'userName': player[1],
+                'score': self.scores[player[0]],
+            })
+        return scores
 
     def get_question(self):
         if not self.is_start:
@@ -107,6 +115,8 @@ class Room:
         } if self.question is not None else None
 
     def get_answer(self):
+        if self.allow_submit:
+            return None
         return {
             'answer': self.answer,
             'reason': self.question['reason'],
@@ -142,8 +152,8 @@ class Room:
             return 0
 
     def finalize(self):
-        for player in self.players:
-            users.update_user(player, {'score': self.scores[player]})
+        # for player in self.players:
+        #     users.update_user(player, {'score': self.scores[player]})
         self.is_start = False
         self.allow_submit = False
         self.ready_players.clear()

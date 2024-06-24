@@ -61,13 +61,15 @@ class Timer:
     def start_turn(self):
         self.room.next_question()
         self.check_over()
-        self.event_queue.put('start')
         self.room.allow_submit = True
+        self.event_queue.put('start')
+
 
     def stop_turn(self):
         self.check_over()
-        self.event_queue.put('done')
         self.room.allow_submit = False
+        self.event_queue.put('done')
+
 
     def check_over(self):
         if not self.room.is_start:
@@ -204,6 +206,21 @@ def question(roomID):
     else:
         return q
 
+@app.get('/rooms/<roomID>/answer')
+def answer(roomID):
+    if not rooms.exists(roomID):
+        return {'status': -1, 'msg': '房间不存在！'}, 404
+    room = rooms.get(roomID)
+    if not room.is_start:
+        return {'status': -2, 'msg': '比赛还未开始！'}, 403
+    # userID = str(request.json.get('userID'))
+    # if not room.is_in_room(userID):
+    #     return {'status': -3, 'msg': '您不在房间内！'}, 403
+    a = room.get_answer()
+    if a is None:
+        return {'status': 1, 'msg': '还没到查看答案的时间哦'}, 404
+    else:
+        return a
 
 @app.post('/rooms/<roomID>/submit')
 def submit(roomID):
@@ -223,6 +240,12 @@ def submit(roomID):
         return {'status': 0, 'msg': '回答正确！'}
     return {'status': -4, 'msg': '回答错误！'}
 
+@app.post('/rooms/<roomID>/scoreboard')
+def scoreboard(roomID):
+    if not rooms.exists(roomID):
+        return {'status': -1, 'msg': '房间不存在！'}, 404
+    room = rooms.get(roomID)
+    return room.scoreboard()
 
 @app.get('/rooms/<roomID>/players')
 def players(roomID):
