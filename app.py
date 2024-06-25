@@ -51,6 +51,7 @@ class Timer:
         self.start()
 
     def run_timer(self):
+        time.sleep(2)
         while True:
             if self.check_over():
                 return
