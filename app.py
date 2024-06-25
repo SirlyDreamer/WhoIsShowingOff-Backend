@@ -52,29 +52,37 @@ class Timer:
 
     def run_timer(self):
         while True:
-            self.check_over()
-            self.start_turn()
+            if self.check_over():
+                return
+            if not self.start_turn():
+                return
             time.sleep(self.listening_time)
-            self.stop_turn()
+            if not self.stop_turn():
+                return
             time.sleep(self.rest_time)
 
     def start_turn(self):
         self.room.next_question()
-        self.check_over()
+        if self.check_over():
+            return False
         self.room.allow_submit = True
         self.event_queue.put('start')
+        return True
 
 
     def stop_turn(self):
-        self.check_over()
+        if self.check_over():
+            return False
         self.room.allow_submit = False
         self.event_queue.put('done')
-
+        return True
 
     def check_over(self):
         if not self.room.is_start:
             self.stop()
             self.event_queue.put('finalize')
+            return True
+        return False
 
     def process_events(self):
         with app.app_context():
